@@ -39,11 +39,12 @@ class AuthService(
         )
 
         val savedUser = userRepository.save(user)
-
+        val token = jwtTokenProvider.generateToken(savedUser)
         return SignupResponse(
             id = savedUser.id,
             username = savedUser.username,
-            email = savedUser.email
+            email = savedUser.email,
+            accessToken = token
         )
     }
 

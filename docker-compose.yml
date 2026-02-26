@@ -21,7 +21,7 @@ services:
   # ---------- ① Spring Backend (AWS RDS 연결) ----------
   backend:
     build:
-      context: .                 # 루트에 있는 Dockerfile 사용
+      context: ./backend         # backend/ 디렉토리의 Dockerfile 사용
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -64,11 +64,11 @@ services:
       
     volumes:
       # 코드 동기화 (핫 리로드)
-      - ./:/workspace
+      - ./backend:/workspace
       # Gradle 캐시 공유로 빌드 속도 향상
       - gradle_cache:/home/gradle/.gradle
       # entrypoint 스크립트 마운트
-      - ./docker/entrypoint.sh:/workspace/docker/entrypoint.sh:ro
+      - ./backend/docker/entrypoint.sh:/workspace/docker/entrypoint.sh:ro
       
     healthcheck:                 # Actuator 사용 (8080/actuator/health)
       test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]

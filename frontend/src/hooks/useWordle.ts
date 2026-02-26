@@ -16,6 +16,7 @@ import {
   getWinMessage,
 } from '@/lib/gameLogic';
 import { getTodaysWord, isValidWord, getRandomWord } from '@/lib/words';
+import { apiPostGameResult } from '@/lib/api';
 
 // ==================== ACTION TYPES ====================
 
@@ -259,7 +260,7 @@ function saveGame(state: GameState): void {
 
 // ==================== MAIN HOOK ====================
 
-export function useWordle() {
+export function useWordle(token?: string | null) {
   const targetWord = getTodaysWord();
 
   const [state, dispatch] = useReducer(
@@ -362,6 +363,10 @@ export function useWordle() {
               saveStats(next);
               return next;
             });
+            // Sync to backend if logged in (fire-and-forget)
+            if (token) {
+              apiPostGameResult(token, row + 1, true).catch(() => {});
+            }
           } else if (isLost) {
             startTransition(() => {
               dispatch({
@@ -378,6 +383,12 @@ export function useWordle() {
               saveStats(next);
               return next;
             });
+            // Sync to backend if logged in (fire-and-forget)
+            if (token) {
+              apiPostGameResult(token, row + 1, false).catch(() => {
+                // Silently fail — localStorage is source of truth for guest play
+              });
+            }
           }
 
           processingRef.current = false;
@@ -395,7 +406,7 @@ export function useWordle() {
         dispatch({ type: 'ADD_LETTER', payload: { letter: upper } });
       }
     },
-    [state, revealRow]
+    [state, revealRow, token]
   );
 
   // ==================== PHYSICAL KEYBOARD ====================

@@ -1,84 +1,74 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+export interface SignupPayload { username: string; email: string; password: string }
+export interface AuthResponse {
+  accessToken: string;
+  tokenType: string;
+  userId: string;
+  username: string;
+  role: string;
+  expiresIn?: number;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? res.statusText);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function apiSignup(payload: SignupPayload): Promise<AuthResponse> {
+  const raw = await request<{
+    id: string; username: string; email: string;
+    accessToken: string; tokenType: string; message: string;
+  }>('/api/auth/signup', { method: 'POST', body: JSON.stringify(payload) });
+  return {
+    accessToken: raw.accessToken,
+    tokenType: raw.tokenType,
+    userId: raw.id,
+    username: raw.username,
+    role: 'USER',
+  };
+}
+
+export async function apiLogin(username: string, password: string): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+// ── Stats ───────────────────────────────────────────────────────────────────
+
 export interface StatsResponse {
   gamesPlayed: number;
   gamesWon: number;
   currentStreak: number;
   maxStreak: number;
-  guessDistribution: number[];
+  guessDistribution: number[];   // [1-guess-wins, 2-guess-wins, ..., 6-guess-wins]
 }
 
-export interface GameResultPayload {
-  guessCount: number;
-  won: boolean;
-}
-
-export interface SignupPayload {
-  username: string;
-  email: string;
-  password: string;
-}
-
-export interface SignupResponse {
-  token: string;
-  userId: string;
-}
-
-export async function getStats(token: string): Promise<StatsResponse> {
-  const res = await fetch(`${API_URL}/api/stats`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+export async function apiGetStats(token: string): Promise<StatsResponse> {
+  return request<StatsResponse>('/api/stats', {
+    headers: { Authorization: `Bearer ${token}` },
   });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch stats: ${res.statusText}`);
-  }
-
-  return res.json() as Promise<StatsResponse>;
 }
 
-export async function postGameResult(
+export async function apiPostGameResult(
   token: string,
   guessCnt: number,
   win: boolean
 ): Promise<void> {
-  const payload: GameResultPayload = { guessCount: guessCnt, won: win };
-
-  const res = await fetch(`${API_URL}/api/game-result`, {
+  await request<void>('/api/stats', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ guessCnt, win }),
   });
-
-  if (!res.ok) {
-    throw new Error(`Failed to post game result: ${res.statusText}`);
-  }
-}
-
-export async function signup(
-  username: string,
-  email: string,
-  password: string
-): Promise<SignupResponse> {
-  const payload: SignupPayload = { username, email, password };
-
-  const res = await fetch(`${API_URL}/api/auth/signup`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Signup failed: ${res.statusText}`);
-  }
-
-  return res.json() as Promise<SignupResponse>;
 }

@@ -59,7 +59,7 @@ Thumbs.db
 *~
 
 # OAuth2 keystore (보안)
-/src/main/resources/keys/keystore.p12
+/backend/src/main/resources/keys/keystore.p12
 
 # Test keystore (필요시 제외)
 # /src/test/resources/test-keystore.p12
