@@ -27,6 +27,10 @@ dependencies {
     
     /* ─ Database ─ */
     runtimeOnly("org.postgresql:postgresql")
+
+    /* ─ Flyway ─ */
+    implementation("org.flywaydb:flyway-core")
+    runtimeOnly("org.flywaydb:flyway-database-postgresql")
     
     /* ─ OAuth 2.0 & JWT ─ */
     implementation("org.springframework.boot:spring-boot-starter-oauth2-authorization-server")

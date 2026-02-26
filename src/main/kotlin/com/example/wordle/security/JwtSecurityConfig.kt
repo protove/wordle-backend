@@ -1,9 +1,11 @@
 package com.example.wordle.security
 
 import com.example.wordle.auth.repository.UserRepository
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.annotation.Order
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -11,9 +13,13 @@ import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.CorsConfigurationSource
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
 @EnableWebSecurity
@@ -21,6 +27,48 @@ class JwtSecurityConfig {
 
     @Bean
     @Order(2)
+    fun apiSecurityFilterChain(
+        http: HttpSecurity,
+        @Qualifier("hmacJwtDecoder") hmacJwtDecoder: JwtDecoder
+    ): SecurityFilterChain {
+        return http
+            .securityMatcher("/api/**")
+            .csrf { it.disable() }
+            .cors { it.configurationSource(corsConfigurationSource()) }
+            .sessionManagement { session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            }
+            .authorizeHttpRequests { auth ->
+                auth
+                    .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/words").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/words").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.DELETE, "/api/words/**").hasRole("ADMIN")
+                    .anyRequest().authenticated()
+            }
+            .oauth2ResourceServer { oauth2 ->
+                oauth2.jwt { jwt ->
+                    jwt.decoder(hmacJwtDecoder)
+                    jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())
+                }
+            }
+            .build()
+    }
+
+    private fun corsConfigurationSource(): CorsConfigurationSource {
+        val configuration = CorsConfiguration()
+        configuration.allowedOriginPatterns = listOf("*")
+        configuration.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        configuration.allowedHeaders = listOf("*")
+        configuration.allowCredentials = true
+        configuration.maxAge = 3600L
+        val source = UrlBasedCorsConfigurationSource()
+        source.registerCorsConfiguration("/**", configuration)
+        return source
+    }
+
+    @Bean
+    @Order(3)
     fun resourceServerSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
         return http
             .securityMatcher("/stats/**", "/actuator/health")
@@ -43,7 +91,7 @@ class JwtSecurityConfig {
     }
 
     @Bean
-    @Order(3)
+    @Order(4)
     fun defaultSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
         return http
             .authorizeHttpRequests { auth ->

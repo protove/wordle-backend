@@ -16,9 +16,14 @@ spring:
       validation-timeout: 5000
       leak-detection-threshold: 60000
       
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
   jpa:
     hibernate:
-      ddl-auto: update  # 개발환경에서는 update 사용
+      ddl-auto: validate  # Flyway manages schema; validate ensures entity/schema consistency
     show-sql: true      # 개발환경에서는 SQL 로그 활성화
     properties:
       hibernate:
@@ -61,3 +66,8 @@ logging:
     # AWS RDS 연결 로깅
     com.zaxxer.hikari: DEBUG
     org.springframework.jdbc: DEBUG
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:cosmic-wordle-secret-key-min-32-characters-long}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}

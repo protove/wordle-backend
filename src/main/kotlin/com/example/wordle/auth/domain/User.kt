@@ -13,7 +13,7 @@ class User(
     val id: UUID = UUID.randomUUID(),
     
     @Column(unique = true, nullable = false, length = 20)
-    private val username: String,
+    val username: String,
     
     @Column(nullable = false, length = 60)
     private val password: String,
