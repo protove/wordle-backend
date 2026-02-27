@@ -59,6 +59,7 @@ management:
 # 개발환경 전용 로깅 (상세한 디버깅 정보)
 logging:
   level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
     org.springframework.security: DEBUG
     com.example.wordle: DEBUG
     org.hibernate.SQL: DEBUG

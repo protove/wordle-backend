@@ -24,6 +24,7 @@
 - [아키텍처](#-아키텍처)
 - [프로젝트 구조](#-프로젝트-구조)
 - [빠른 시작](#-빠른-시작)
+- [환경 분리 전략](#-환경-분리-전략)
 - [API 명세](#-api-명세)
 - [인증 플로우](#-인증-플로우)
 - [환경변수 가이드](#-환경변수-가이드)
@@ -243,29 +244,46 @@ cd wordle-backend
 
 ### 2. 환경변수 설정
 
+각 환경에 맞는 템플릿을 복사하고 실제 값을 입력합니다.
+
 ```bash
+# 개발 환경
 cp .env.dev.template .env.dev
+
+# 프로덕션 환경
+cp .env.prod.template .env.prod
+
+# 테스트 환경
+cp .env.test.template .env.test
 ```
 
-`.env.dev` 파일을 열어 필수 항목 입력:
+필수 입력 항목 (dev 기준):
 
 ```bash
-# DB 연결 정보 (AWS RDS 또는 로컬 PostgreSQL)
+# ① DB 연결 정보
 AWS_DEV_DB_URL=jdbc:postgresql://<host>:5432/<database>
 AWS_DEV_DB_USERNAME=<username>
 AWS_DEV_DB_PASSWORD=<password>
 
-# JWT 시크릿 (최소 32자 이상의 랜덤 문자열)
+# ② JWT 시크릿 (32자 이상 랜덤 문자열 권장)
+#    openssl rand -hex 32
 JWT_SECRET=your-very-secret-key-at-least-32-characters-long
 
-# 프론트엔드가 백엔드를 호출할 주소
+# ③ 프론트엔드 → 백엔드 API 주소
 NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 
-### 3. 실행
+### 3. 환경별 실행
 
 ```bash
+# 🔧 개발 환경 (SQL 로그 활성화, actuator 전체 노출)
 docker compose --env-file .env.dev up --build
+
+# 🚀 프로덕션 환경 (로그 최소화, actuator 보안 강화)
+docker compose --env-file .env.prod up --build -d
+
+# 🧪 테스트 환경
+docker compose --env-file .env.test up --build
 ```
 
 | 서비스 | 주소 |
@@ -279,6 +297,90 @@ docker compose --env-file .env.dev up --build
 ```bash
 docker compose down
 ```
+
+---
+
+## 🌍 환경 분리 전략
+
+단일 `docker-compose.yml` + `--env-file` 플래그 조합으로 dev / test / prod 세 환경을 완전히 분리합니다.
+
+### 환경 선택 흐름
+
+```
+docker compose --env-file .env.{dev|test|prod} up
+       │
+       ├─▶  SPRING_PROFILES_ACTIVE={dev|test|prod}
+       │           │
+       │           ├─▶ application-dev.yml   (개발: SQL 로그, DEBUG)
+       │           ├─▶ application-test.yml  (테스트: create-drop, DEBUG)
+       │           └─▶ application-prod.yml  (운영: validate, WARN, 로그파일)
+       │
+       ├─▶  AWS_{DEV|TEST|PROD}_DB_{URL|USERNAME|PASSWORD}
+       │           └─▶ 각 Spring 프로파일이 자신의 환경 변수만 읽음
+       │
+       ├─▶  JWT_SECRET / CORS_ALLOWED_ORIGINS / LOGGING_LEVEL_ROOT
+       │           └─▶ docker-compose.yml 의 environment 섹션을 통해 컨테이너 주입
+       │
+       └─▶  NEXT_PUBLIC_API_URL
+                   └─▶ Next.js 빌드 시 환경변수로 번들링 (브라우저용)
+```
+
+### 환경별 핵심 차이점
+
+| 항목 | dev | test | prod |
+|------|-----|------|------|
+| **Spring Profile** | `dev` | `test` | `prod` |
+| **DB** | AWS RDS Dev | AWS RDS Test | AWS RDS Prod |
+| **DDL** | `validate` | `create-drop` | `validate` |
+| **SQL 로그** | ✅ ON | ✅ ON | ❌ OFF |
+| **show-details** | `always` | `always` | `never` |
+| **HikariCP pool** | 최대 10 | 최대 5 | 최대 20 |
+| **Actuator 노출** | health+info+beans+metrics+env | health+info+beans+metrics | health+info+metrics |
+| **CORS** | `localhost:3000,3001` | `localhost:3000,3001` | 실제 도메인 |
+| **로그 출력** | 콘솔 (DEBUG) | 콘솔 (DEBUG) | 파일 `/var/log/wordle/` (WARN) |
+| **JWT 만료** | 24h (설정 가능) | 24h (설정 가능) | 24h (설정 가능) |
+| **Flyway baseline** | `true` | — | `false` |
+
+### 보안 강화 포인트 (prod)
+
+```yaml
+# application-prod.yml
+management:
+  endpoint:
+    health:
+      show-details: never     # ← 내부 DB 정보 노출 차단
+
+jpa:
+  show-sql: false              # ← SQL 쿼리 로그 완전 비활성화
+  open-in-view: false          # ← N+1 방지 + 불필요한 커넥션 점유 차단
+
+logging:
+  level:
+    root: WARN                 # ← INFO/DEBUG 로그 차단, 이슈만 기록
+  file:
+    name: /var/log/wordle/application.log  # ← 파일 영속 로깅
+```
+
+### `.env` 파일 보안 관리
+
+```
+# .gitignore (이미 적용됨)
+.env          # ✅ 추적 안 됨
+.env.dev      # ✅ 추적 안 됨
+.env.prod     # ✅ 추적 안 됨
+.env.test     # ✅ 추적 안 됨
+
+# 저장소에 포함되는 것
+.env.dev.template    # ✅ 키 목록 + 안내 주석 (실제 값 없음)
+.env.prod.template   # ✅ 키 목록 + 안내 주석
+.env.test.template   # ✅ 키 목록 + 안내 주석
+```
+
+> **JWT 시크릿 생성 권장 방법**
+> ```bash
+> # 32바이트 랜덤 16진수 문자열 생성
+> openssl rand -hex 32
+> ```
 
 ---
 
@@ -502,27 +604,35 @@ UNIQUE CONSTRAINT: games(user_id, game_date)  -- 하루 1게임 보장
 
 ## ⚙️ 환경변수 가이드
 
-전체 환경변수는 `.env.*.template` 파일을 참조하세요.
+전체 환경변수는 각 `.env.*.template` 파일을 참조하세요.
 
-### 필수 환경변수
+### DB 연결 변수 (환경별 구분)
 
-| 변수명 | 설명 | 예시 |
-|--------|------|------|
-| `AWS_DEV_DB_URL` | PostgreSQL JDBC URL | `jdbc:postgresql://host:5432/db` |
-| `AWS_DEV_DB_USERNAME` | DB 사용자명 | `wordle_user` |
-| `AWS_DEV_DB_PASSWORD` | DB 비밀번호 | `secure_password` |
-| `JWT_SECRET` | HMAC JWT 시크릿 (32자+) | `my-super-secret-32char-key-here!` |
-| `NEXT_PUBLIC_API_URL` | 프론트 → 백엔드 URL | `http://localhost:8080` |
+| 환경 | 변수명 | Spring 프로파일 |
+|------|--------|----------------|
+| dev | `AWS_DEV_DB_URL` / `AWS_DEV_DB_USERNAME` / `AWS_DEV_DB_PASSWORD` | `application-dev.yml` |
+| test | `AWS_TEST_DB_URL` / `AWS_TEST_DB_USERNAME` / `AWS_TEST_DB_PASSWORD` | `application-test.yml` |
+| prod | `AWS_PROD_DB_URL` / `AWS_PROD_DB_USERNAME` / `AWS_PROD_DB_PASSWORD` | `application-prod.yml` |
 
-### 선택 환경변수
+### 공통 필수 변수 (세 환경 모두)
+
+| 변수명 | 설명 | dev 예시 | prod 예시 |
+|--------|------|----------|-----------|
+| `SPRING_PROFILES_ACTIVE` | Spring 프로파일 선택 | `dev` | `prod` |
+| `JWT_SECRET` | HMAC-SHA256 시크릿 (32자+) | `dev-secret-key...` | `openssl rand -hex 32` |
+| `JWT_EXPIRATION_MS` | JWT 만료시간 (ms) | `86400000` | `86400000` |
+| `CORS_ALLOWED_ORIGINS` | CORS 허용 출처 | `http://localhost:3000` | `https://your-domain.com` |
+| `LOGGING_LEVEL_ROOT` | 루트 로그 레벨 | `INFO` | `WARN` |
+| `NEXT_PUBLIC_API_URL` | 프론트 → 백엔드 URL | `http://localhost:8080` | `https://your-domain.com` |
+
+### 선택 변수
 
 | 변수명 | 기본값 | 설명 |
 |--------|--------|------|
 | `SERVER_PORT` | `8080` | 백엔드 포트 |
 | `FRONTEND_PORT` | `3000` | 프론트엔드 포트 |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | CORS 허용 출처 (쉼표 구분) |
-| `JWT_EXPIRATION_MS` | `86400000` | JWT 만료시간 (ms, 기본 24h) |
-| `SPRING_PROFILES_ACTIVE` | `dev` | Spring 프로파일 (dev/test/prod) |
+| `JWT_KEYSTORE_PASSWORD` | `changeit` | RSA 키스토어 비밀번호 |
+| `AWS_REGION` | `ap-northeast-2` | AWS 리전 |
 
 ---
 
@@ -551,13 +661,13 @@ psql -h <RDS_ENDPOINT> -U <USERNAME> -d <DATABASE>
 ### 환경별 실행
 
 ```bash
-# 개발 환경
+# 🔧 개발 환경 (포그라운드, 로그 실시간 확인)
 docker compose --env-file .env.dev up --build
 
-# 테스트 환경
+# 🧪 테스트 환경
 docker compose --env-file .env.test up --build
 
-# 운영 환경
+# 🚀 프로덕션 환경 (백그라운드 데몬)
 docker compose --env-file .env.prod up --build -d
 ```
 
@@ -572,6 +682,9 @@ docker compose logs -f backend
 
 # 프론트엔드만
 docker compose logs -f frontend
+
+# 프로덕션 파일 로그 (컨테이너 내부)
+docker compose exec backend tail -f /var/log/wordle/application.log
 ```
 
 ---

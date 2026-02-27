@@ -45,20 +45,30 @@ services:
       AWS_PROD_DB_USERNAME: ${AWS_PROD_DB_USERNAME:-}
       AWS_PROD_DB_PASSWORD: ${AWS_PROD_DB_PASSWORD:-}
       
-      # JWT 설정
+      # OAuth2 JWT 키스토어 (RSA)
       JWT_KEYSTORE_LOCATION: ${JWT_KEYSTORE_LOCATION:-classpath:keystore.p12}
       JWT_KEYSTORE_PASSWORD: ${JWT_KEYSTORE_PASSWORD:-changeit}
       JWT_KEYSTORE_ALIAS: ${JWT_KEYSTORE_ALIAS:-wordle-jwt}
-      
-      # entrypoint.sh 스크립트용 키스토어 설정
+
+      # entrypoint.sh 스크립트용 키스토어 자동 생성 설정
       KEYSTORE_PATH: ${KEYSTORE_PATH:-/workspace/src/main/resources/keys/keystore.p12}
       KEY_ALIAS: ${KEY_ALIAS:-oauth-key}
       KEYSTORE_PW: ${KEYSTORE_PW:-changeit}
       DNAME: ${DNAME:-CN=wordle-auth, OU=Dev, O=Wordle, L=Seoul, S=Seoul, C=KR}
-      
+
+      # API JWT 시크릿 (HMAC-SHA256) — 반드시 .env 파일에서 오버라이드
+      JWT_SECRET: ${JWT_SECRET:-cosmic-wordle-default-secret-key-change-in-production}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+
+      # CORS 허용 출처 — 프로덕션에서는 실제 도메인으로 변경
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+
+      # 로깅 레벨 — 개발: INFO/DEBUG, 프로덕션: WARN
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
+
       # Gradle 캐시
       GRADLE_USER_HOME: /home/gradle/.gradle
-      
+
       # AWS 리전
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       
